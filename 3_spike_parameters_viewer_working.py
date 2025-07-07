@@ -16,13 +16,14 @@ import os
 import re
 
 # Path to the CSV file where spike parameters are already calculated
-spike_parameters_csv_path = '/Users/gs075/Desktop/final_analysis_HF/2_all_parameters.csv'
+spike_parameters_csv_path = root = '/Users/gs075/Desktop/test/2_all_parameters.csv'
 
 sample_rate = 10000
 highlight_window = 10  # ms
 timescale_start = 0.25  # s
 timescale_end = 1.25    # s
 display_window = 60
+LJP_CORRECTION_MV = 14.681  # Subtract from voltage to correct for liquid junction potential
 
 spike_params_df = pd.read_csv(spike_parameters_csv_path)
 unique_recordings = spike_params_df['recording'].unique()
@@ -79,7 +80,7 @@ def update_plot():
     abf = pyabf.ABF(os.path.join('/Users/gs075/Desktop/steps_analyses', recording))
     abf.setSweep(sweep_number)
     time = abf.sweepX
-    voltage = abf.sweepY
+    voltage = abf.sweepY - LJP_CORRECTION_MV
 
     length = len(time)
     mf = 0.015625

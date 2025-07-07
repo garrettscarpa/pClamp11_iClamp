@@ -18,7 +18,8 @@ from scipy.interpolate import interp1d  # Importing interp1d for interpolation
 import pyabf
 
 # --- Settings ---
-ROOT = '/Users/gs075/Desktop/final_analysis_HF'  # Root directory for data
+ROOT = '/Users/gs075/Desktop/test'
+  # Root directory for data
 redefine_path = True  # Set to True if working on laptop for path adjustment
 ORDERED_CONDITIONS = ['control', 'tumor']  # Conditions to compare
 COLOR_MAP = {'control': 'dimgrey', 'tumor': 'tomato'}  # Colors for plotting

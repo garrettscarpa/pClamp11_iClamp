@@ -14,11 +14,12 @@ from matplotlib.widgets import Slider, TextBox, Button
 import ast
 
 # Folder where recordings are stored
-root = '/Users/gs075/Desktop/final_analysis_HF/'
+root = '/Users/gs075/Desktop/test'
 protocol = 'Steps_300'
 
 min_isi = .3  # ms
 threshold = 0  # default threshold
+LJP_CORRECTION_MV = 14.681 # LJP correction in mV — will be subtracted from recorded voltages
 is_unblinded = False
 sweep_threshold = None
 is_slider_update_internal = False
@@ -110,7 +111,7 @@ def update_plot(recording_index, sweep_number):
         offset = int(len(raw_time) * mf)
         time = np.concatenate([np.zeros(offset), raw_time])[:-offset]
     
-        voltage = abf.sweepY
+        voltage = abf.sweepY - LJP_CORRECTION_MV
         command = abf.sweepC
     
         time_filter = (time >= temporal_range_start) & (time <= temporal_range_end)
@@ -152,7 +153,7 @@ def update_plot(recording_index, sweep_number):
     offset = int(len(raw_time) * mf)
     time = np.concatenate([np.zeros(offset), raw_time])[:-offset]
 
-    voltage = abf.sweepY
+    voltage = abf.sweepY - LJP_CORRECTION_MV
     command = abf.sweepC
 
     if temporal_range_end is None:

@@ -12,12 +12,12 @@ import os
 from matplotlib.widgets import Slider
 
 # Load the ABF file
-root = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/Patch Clamp/Data'
-file = '2025_06_10_0002_Steps_300'
+root = '/Users/gs075/Desktop/test/control'
+file = '2025_05_06_0035_Steps_300'
 
-
-# Set minimum inter-spike-interval
-min_isi = 2
+min_isi = 2         # Set minimum inter-spike-interval
+window_start = 0.25  # in ms, user-defined start time
+window_end = 1.25    # in ms, user-defined end time
 
 rec = os.path.join(root, file) + '.abf'
 abf = pyabf.ABF(rec)
@@ -25,11 +25,14 @@ abf = pyabf.ABF(rec)
 # Determine the length of the sweep in ms and the offset
 length = len(abf.sweepX)  # in samples
 mf = 0.015625
+LJP_CORRECTION_MV = 14.681 # LJP correction in mV — will be subtracted from recorded voltages
 
 offset = int(length * mf)
 time = abf.sweepX
 time = np.concatenate([np.zeros(offset, dtype=np.float64), time])
 time = time[:-offset]
+start_sample = int(window_start * abf.sampleRate)
+end_sample = int(window_end * abf.sampleRate)
 
 # Initialize variables to store the global min and max for y-axes
 global_ymin = float('inf')
@@ -90,7 +93,7 @@ for sweep_number in range(abf.sweepCount):
     current_injections.append(current_injected_range)
 
     # Detect threshold crossings and apply latency
-    voltage_trace = abf.sweepY
+    voltage_trace = abf.sweepY - LJP_CORRECTION_MV
     crossing_indices = np.where(voltage_trace > threshold)[0]
     
     detected_peaks = []
@@ -170,7 +173,7 @@ def update_plot(sweep_number, spike_freqs):
 
 
     # Plot the new sweep data
-    axes[0].plot(time, abf.sweepY, color='purple')
+    axes[0].plot(time, abf.sweepY - LJP_CORRECTION_MV, color='purple')
     axes[0].set_title(f'Signal - Sweep {sweep_number}')
     axes[0].set_ylabel('Voltage (mV)')
     axes[0].set_ylim(-100, 100)  # Apply global y-limits
@@ -193,7 +196,7 @@ def update_plot(sweep_number, spike_freqs):
 
 
     # Detect threshold crossings and apply latency
-    voltage_trace = abf.sweepY
+    voltage_trace = abf.sweepY - LJP_CORRECTION_MV
     crossing_indices = np.where(voltage_trace > threshold)[0]
     
     detected_peaks = []
@@ -232,33 +235,45 @@ def on_key(event):
         return
 
     threshold = thresholds[current_sweep]  # Load saved threshold
-    spike_freqs = compute_spike_frequencies(threshold)
-    update_plot(current_sweep, spike_freqs)
+    update_plot(current_sweep, spike_frequencies)
+
 
 def update_threshold(val):
     global threshold
     threshold = val
     thresholds[current_sweep] = val  # Save threshold for this sweep
 
-    # Recalculate spike frequency for current sweep only
     abf.setSweep(current_sweep)
-    voltage_trace = abf.sweepY
-    crossing_indices = np.where(voltage_trace > threshold)[0]
+    voltage_trace = abf.sweepY - LJP_CORRECTION_MV
+    
+    # Define detection window in samples (seconds to samples)
+    start_sample = int(window_start * abf.sampleRate)
+    end_sample = int(window_end * abf.sampleRate)
+    
+    # Detect threshold crossings only within this window
+    crossing_indices = np.where(
+        (voltage_trace > threshold) & 
+        (np.arange(len(voltage_trace)) >= start_sample) & 
+        (np.arange(len(voltage_trace)) <= end_sample)
+    )[0]
+    
     last_crossing = -latency_samples
     detected_peaks = []
 
     for idx in crossing_indices:
         if idx - last_crossing > latency_samples:
-            start_idx = max(0, idx - window_samples)
-            end_idx = min(len(voltage_trace), idx + window_samples)
+            start_idx = max(start_sample, idx - window_samples)
+            end_idx = min(end_sample, idx + window_samples)
             peak_idx = np.argmax(voltage_trace[start_idx:end_idx]) + start_idx
             detected_peaks.append((time[peak_idx], voltage_trace[peak_idx]))
             last_crossing = idx
 
-    spike_frequencies[current_sweep] = len(detected_peaks) / time_per_sweep
+    window_duration_sec = window_end - window_start
+    spike_frequencies[current_sweep] = len(detected_peaks) / window_duration_sec
 
-    # Update only the current plot
     update_plot(current_sweep, spike_frequencies)
+
+
 
 # Create a slider for adjusting the threshold
 ax_threshold = plt.axes([0.15, 0.01, 0.7, 0.03])  # Position of slider

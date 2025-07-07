@@ -2,7 +2,7 @@ import os
 import pyabf
 
 # Directory where .abf files are located
-root_dir = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/Patch Clamp/Data'
+root_dir = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Data'
 
 # Loop through all .abf files in the directory
 for filename in os.listdir(root_dir):

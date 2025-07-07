@@ -11,14 +11,17 @@ from scipy.interpolate import interp1d
 ###ADD CONDITION TO ALL_PARAMETERS.CSV
 
 # Path to the CSV file
-file_path = '/Users/gs075/Desktop/final_analysis_HF'
+file_path = '/Users/gs075/Desktop/test'
+
 
 detection_window = 20
-highlight_window = 30  # for zoomed-in pop-up plot; in milliseconds
+highlight_window = 30       # for zoomed-in pop-up plot; in milliseconds
 display_window = 20
-timescale_start = 0.25  # Start of timescale for steady state calculation in seconds (e.g., 250 ms)
-timescale_end = 1.25    # End of timescale for steady state calculation in seconds (e.g., 1250 ms)
+timescale_start = 0.25      # Start of timescale for steady state calculation in seconds (e.g., 250 ms)
+timescale_end = 1.25        # End of timescale for steady state calculation in seconds (e.g., 1250 ms)
 offset = 0.015625
+LJP_CORRECTION_MV = 14.681  # LJP Correction (in mV) — this value will be subtracted from all voltage measurements
+
 
 # Load the action potential data
 df_all = pd.read_csv(file_path + "/1_thresholded_data.csv")
@@ -155,7 +158,7 @@ for idx, row in tqdm(peaks.iterrows(), total=peaks.shape[0], desc="Processing Pe
 
     # Get the voltage trace and time
     time = abf.sweepX
-    voltage = abf.sweepY
+    voltage = abf.sweepY - LJP_CORRECTION_MV
     
     # Apply the offset to the time array before any calculations
     length = len(time)  # in samples
