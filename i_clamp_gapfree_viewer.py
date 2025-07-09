@@ -4,7 +4,7 @@ import os
 
 ############################## Load the ABF file ##############################
 root = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Data'
-recording = '2025_07_02_0008_Gap_Free'
+recording = '2025_07_01_0023_Gap_Free'
 
 abf = pyabf.ABF(os.path.join(root, recording + ".abf"))
 

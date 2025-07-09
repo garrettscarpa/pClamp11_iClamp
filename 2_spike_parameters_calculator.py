@@ -1,7 +1,5 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
 import pyabf
 import os
 import re
@@ -11,7 +9,7 @@ from scipy.interpolate import interp1d
 ###ADD CONDITION TO ALL_PARAMETERS.CSV
 
 # Path to the CSV file
-file_path = '/Users/gs075/Desktop/test'
+file_path = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
 
 
 detection_window = 20

@@ -14,12 +14,18 @@ from matplotlib.widgets import Slider, TextBox, Button
 import ast
 
 # Folder where recordings are stored
-root = '/Users/gs075/Desktop/test'
+root = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth/'
 protocol = 'Steps_300'
 
-min_isi = .3  # ms
+min_isi = .1  # ms
 threshold = 0  # default threshold
 LJP_CORRECTION_MV = 14.681 # LJP correction in mV — will be subtracted from recorded voltages
+window_ms = 5
+temporal_range_start = 0.25
+temporal_range_end = 1.26
+
+
+window_samples = None
 is_unblinded = False
 sweep_threshold = None
 is_slider_update_internal = False
@@ -37,11 +43,27 @@ current_sweep = 0
 current_recording_index = 0
 sweep_thresholds = {}
 
-window_ms = 5
-window_samples = None
 
-temporal_range_start = 0.25
-temporal_range_end = 1.26
+# Load previously saved thresholds if available
+threshold_data_file = os.path.join(root, '1_thresholded_data.csv')
+if os.path.exists(threshold_data_file):
+    df_existing = pd.read_csv(threshold_data_file)
+
+    for idx, row in df_existing.iterrows():
+        try:
+            recording = row['recording']
+            sweep_number = int(row['sweep_number'])
+            threshold_val = float(row['threshold'])
+
+            recording_filename = os.path.normpath(recording)
+            for i, abf_file in enumerate(abf_files):
+                if os.path.normpath(abf_file) == recording_filename:
+                    key = (i, sweep_number)
+                    sweep_thresholds[key] = threshold_val
+                    break
+        except Exception as e:
+            print(f"Error loading threshold for row {idx}: {e}")
+
 
 fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
 action_potential_data = []

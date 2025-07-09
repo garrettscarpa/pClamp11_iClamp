@@ -18,7 +18,7 @@ from scipy.interpolate import interp1d  # Importing interp1d for interpolation
 import pyabf
 
 # --- Settings ---
-ROOT = '/Users/gs075/Desktop/test'
+ROOT = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
   # Root directory for data
 redefine_path = True  # Set to True if working on laptop for path adjustment
 ORDERED_CONDITIONS = ['control', 'tumor']  # Conditions to compare
@@ -64,7 +64,7 @@ def plot_data(ax, df, y, title):
                 order=ORDERED_CONDITIONS, showfliers=False, ax=ax)
 
     swarm = sns.swarmplot(x='condition', y=y, data=df, hue='condition', palette='dark:black',  
-                          order=ORDERED_CONDITIONS, size=6, alpha=0.7, ax=ax)
+                          order=ORDERED_CONDITIONS, size=3, alpha=0.7, ax=ax)
 
     # Register each point collection in the swarm plot
     for line in swarm.collections:
@@ -86,7 +86,7 @@ def plot_ap_param(ax, df, y, title):
                 order=ORDERED_CONDITIONS, showfliers=False, ax=ax)
 
     swarm = sns.swarmplot(x='condition', y=y, data=df, hue='condition', palette='dark:black',  
-                          order=ORDERED_CONDITIONS, size=6, alpha=0.7, ax=ax)
+                          order=ORDERED_CONDITIONS, size=3, alpha=0.7, ax=ax)
 
     # Register each point collection for picking
     for coll in swarm.collections:
@@ -147,7 +147,7 @@ def onpick(event):
                             label = f"{trimmed}\n{param} = {val} ({x_clicked})"
         
                             # Highlight the selected point with the correct x/y coordinates
-                            selected_point_artist = ax.plot(x_clicked, y_clicked, 'o', color='red', markersize=12, zorder=10)[0]
+                            selected_point_artist = ax.plot(x_clicked, y_clicked, 'o', color='red', markersize=6, zorder=10)[0]
         
                             # Annotate it with the label
                             selected_annotation = ax.annotate(
@@ -267,7 +267,7 @@ p_rheo = t_test_by_condition(rheos, 'rheobase')
 sns.boxplot(x='condition', y='rheobase', data=rheos, hue='condition', palette=COLOR_MAP,
             order=ORDERED_CONDITIONS, showfliers=False, ax=axs[2])
 swarm_rheo = sns.swarmplot(x='condition', y='rheobase', data=rheos, hue='condition', 
-                           palette='dark:black', order=ORDERED_CONDITIONS, size=6, alpha=0.7, ax=axs[2])
+                           palette='dark:black', order=ORDERED_CONDITIONS, size=3, alpha=0.7, ax=axs[2])
 for coll in swarm_rheo.collections:
     coll.set_picker(True)
     artist_to_data[coll] = (rheos, 'rheobase')
@@ -387,7 +387,7 @@ p_val = stats.ttest_ind(capacitance_data[capacitance_data['condition'] == 'contr
 sns.boxplot(x='condition', y='value', data=capacitance_data, hue='condition', palette=COLOR_MAP,
             order=ORDERED_CONDITIONS, showfliers=False, ax=axs[9])
 strip = sns.stripplot(x='condition', y='value', data=capacitance_data, hue='condition',
-                      color=DOT_COLOR, jitter=True, size=6, alpha=0.7, ax=axs[9])
+                      color=DOT_COLOR, jitter=True, size=3, alpha=0.7, ax=axs[9])
 for coll in strip.collections:
     coll.set_picker(True)
     artist_to_data[coll] = (capacitance_data, 'value')
@@ -406,7 +406,7 @@ axs[9].set_xlabel("")  # Remove default x-axis label
 handles, labels = [], []
 for cond in ORDERED_CONDITIONS:
     n = capacitance_data[capacitance_data['condition'] == cond]['filename'].nunique()
-    handle = plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=COLOR_MAP[cond], markersize=10)
+    handle = plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=COLOR_MAP[cond], markersize=5)
     handles.append(handle)
     labels.append(f"{cond} (n={n})")
 

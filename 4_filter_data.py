@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 
 ###############################################################################
 # User-defined configuration
-parent_folder = '/Users/gs075/Desktop/test'
-freq_range = [1, 600]  # Frequency range (spike count)
-rmp_threshold = -50
-ap_amplitude_threshold = 40  # in mV
-ap_peak_voltage_threshold = -5  # in mV (new exclusion)
-input_resistance_threshold = 50  # in MΩ (new exclusion)
+parent_folder = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
+freq_range = [2, 600]  # Frequency range (spike count)
+input_resistance_range = [10, 200]  # in MΩ, [min, max]
+rmp_range = [-100, -50]  # acceptable RMP range in mV
+half_width_range = [0.0, 4.0]  # in ms, adjust as needed
+ap_amplitude_threshold = 0  # in mV
+ap_peak_voltage_threshold = -100  # in mV (new exclusion)
 ###############################################################################
 
 # Load the thresholded AP data
@@ -74,14 +75,15 @@ for condition in conditions:
         rmp_series = filtered_condition_data.loc[filtered_condition_data['recording'] == recording, 'RMP_mV']
         if not rmp_series.isnull().all():
             rmp = rmp_series.iloc[0]
-            if rmp <= rmp_threshold:
+            if rmp_range[0] <= rmp <= rmp_range[1]:
                 rmp_valid_recordings.append(recording)
             else:
                 excluded_records.append({
                     'recording': recording,
-                    'reason': 'RMP > -50 mV',
+                    'reason': f'RMP outside {rmp_range[0]} to {rmp_range[1]} mV',
                     'RMP': rmp
                 })
+
         else:
             excluded_records.append({
                 'recording': recording,
@@ -91,18 +93,18 @@ for condition in conditions:
 
     rmp_filtered_data = filtered_condition_data[filtered_condition_data['recording'].isin(rmp_valid_recordings)]
     
-    # Filter based on Input Resistance
+    # Filter based on Input Resistance within a range
     ir_valid_recordings = []
     for recording in np.unique(rmp_filtered_data['recording']):
         ir_series = rmp_filtered_data.loc[rmp_filtered_data['recording'] == recording, 'Input_Resistance_MOhm']
         if not ir_series.isnull().all():
             ir = ir_series.iloc[0]
-            if ir >= input_resistance_threshold:
+            if input_resistance_range[0] <= ir <= input_resistance_range[1]:
                 ir_valid_recordings.append(recording)
             else:
                 excluded_records.append({
                     'recording': recording,
-                    'reason': 'IR < 50',
+                    'reason': f'IR outside {input_resistance_range[0]}–{input_resistance_range[1]} MΩ',
                     'IR': ir
                 })
         else:
@@ -111,9 +113,9 @@ for condition in conditions:
                 'reason': 'No IR measurement',
                 'IR': np.nan
             })
-
-    ir_filtered_data = rmp_filtered_data[rmp_filtered_data['recording'].isin(ir_valid_recordings)]
-
+    
+        ir_filtered_data = rmp_filtered_data[rmp_filtered_data['recording'].isin(ir_valid_recordings)]
+    
 
     # Filter by AP amplitude, AP peak voltage, and Input Resistance (from averaged_data)
     ap_valid_recordings = []
@@ -146,8 +148,29 @@ for condition in conditions:
                 'reason': 'No AP amplitude data',
                 'ap_amplitude': np.nan
             })
-
-    final_filtered_data = ir_filtered_data[ir_filtered_data['recording'].isin(ap_valid_recordings)]
+            
+        # Filter based on half_width from averaged_data
+    hw_valid_recordings = []
+    for recording in ap_valid_recordings:
+        ap_row = averaged_data[averaged_data['recording'] == recording]
+        if not ap_row.empty:
+            hw = ap_row['half_width'].values[0]  # assuming 'half_width' is a column in averaged_data
+            if half_width_range[0] <= hw <= half_width_range[1]:
+                hw_valid_recordings.append(recording)
+            else:
+                excluded_records.append({
+                    'recording': recording,
+                    'reason': f'Half-width outside {half_width_range[0]}–{half_width_range[1]} ms',
+                    'half_width': hw
+                })
+        else:
+            excluded_records.append({
+                'recording': recording,
+                'reason': 'No half-width data',
+                'half_width': np.nan
+            })
+    
+    final_filtered_data = ir_filtered_data[ir_filtered_data['recording'].isin(hw_valid_recordings)]
     filtered_data.append(final_filtered_data)
 
 
@@ -183,26 +206,28 @@ mouse_ids = bin_mouse_matrix.columns
 color_map = {mouse: cmap(i % 20) for i, mouse in enumerate(mouse_ids)}
 
 # Step 6: Plot
-fig, ax = plt.subplots(figsize=(10, 6))
+# Plot stacked histogram using bin_mouse_matrix
+num_bins = len(bins) - 1
+bin_centers = bins[:-1] + np.diff(bins)[0] / 2
+bottom = np.zeros(num_bins)
 
+# Ensure matrix is complete
+bin_mouse_matrix = bin_mouse_matrix.reindex(index=range(num_bins), columns=mouse_ids, fill_value=0)
+
+# Plot
+fig, ax = plt.subplots(figsize=(10, 6))
 for mouse_id in mouse_ids:
-    sub_df = max_firing_df[max_firing_df['mouse_id'] == mouse_id]
-    bin_values = sub_df['bin'].values
-    counts = [1] * len(bin_values)  # Each recording counts as 1
-    
-    bin_width = np.diff(bins)[0]
-    bin_centers = bins[bin_values] + bin_width / 2
-    
+    counts = bin_mouse_matrix[mouse_id].values
     ax.bar(
         bin_centers,
         counts,
-        width=bin_width * 0.9,
+        bottom=bottom,
+        width=np.diff(bins)[0] * 0.9,
         color=color_map[mouse_id],
         label=mouse_id,
         align='center'
     )
-
-
+    bottom += counts
 
 ax.set_title('Histogram of Max Firing Rates Colored by Mouse ID')
 ax.set_xlabel('Max Firing Rate (Hz)')
@@ -210,6 +235,12 @@ ax.set_ylabel('Number of Cells')
 ax.grid(axis='y', linestyle='--', alpha=0.7)
 ax.legend(title='Recording Date', bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
+
+# Save
+histogram_path = os.path.join(parent_folder, 'max_firing_rate_by_mouse.png')
+plt.savefig(histogram_path, dpi=300)
+plt.show()
+
 
 # Step 7: Save
 histogram_path = os.path.join(parent_folder, 'max_firing_rate_by_mouse.png')
