@@ -1,30 +1,36 @@
 import os
 import pyabf
+import shutil
 
-# Directory where .abf files are located
-root_dir = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Data'
+root_dir = '/Users/gs075/Documents/HVDriveBackup/Backup/PatchClamp/Data'
+dest_dir = '/Users/gs075/Documents/HVDriveBackup/Data_Renamed'
+os.makedirs(dest_dir, exist_ok=True)
 
-# Loop through all .abf files in the directory
 for filename in os.listdir(root_dir):
     if filename.endswith('.abf'):
-        # Check if there are 3 or fewer underscores in the original filename
         if filename.count('_') <= 3:
             file_path = os.path.join(root_dir, filename)
-            abf = pyabf.ABF(file_path)
-            
-            # Get the protocol name from the ABF file
-            protocol_name = abf.protocol
-            
-            # Replace spaces with underscores in the filename and protocol name
-            filename = filename.replace(' ', '_')
-            protocol_name = protocol_name.replace(' ', '_')
-            
-            # Remove the .abf extension from the original filename
-            base_filename = filename[:-4]  # Remove '.abf'
-            
-            # Construct the new filename (adding protocol name to the end and .abf at the end)
+
+            # Optionally skip empty files early
+            if os.path.getsize(file_path) == 0:
+                print(f"Skipped empty file: {filename}")
+                continue
+
+            try:
+                abf = pyabf.ABF(file_path)
+            except Exception as e:
+                print(f"Failed to load {filename}: {e}")
+                continue
+
+            protocol_name = abf.protocol.replace(' ', '_')
+            clean_filename = filename.replace(' ', '_')
+            base_filename = clean_filename[:-4]  # remove .abf
+
             new_filename = f"{base_filename}_{protocol_name}.abf"
-            new_file_path = os.path.join(root_dir, new_filename)
-            # Rename the file
-            os.rename(file_path, new_file_path)
-            print(f"Renamed: {filename} -> {new_filename}")
+            dest_file_path = os.path.join(dest_dir, new_filename)
+
+            if not os.path.exists(dest_file_path):
+                shutil.copy2(file_path, dest_file_path)
+                print(f"Copied to Backup_Renamed: {filename} -> {new_filename}")
+            else:
+                print(f"Skipped (already exists): {new_filename}")

@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 10 17:46:19 2025
-
-@author: gs075
-"""
-
 import os
 import re
 import numpy as np
@@ -18,25 +10,40 @@ from scipy.interpolate import interp1d  # Importing interp1d for interpolation
 import pyabf
 
 # --- Settings ---
-ROOT = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
-  # Root directory for data
-redefine_path = True  # Set to True if working on laptop for path adjustment
+ROOT = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+
+FIG_TITLE = "Half Width: 0 - 0.75 ms"
 ORDERED_CONDITIONS = ['control', 'tumor']  # Conditions to compare
 COLOR_MAP = {'control': 'dimgrey', 'tumor': 'tomato'}  # Colors for plotting
-DOT_COLOR, IR_STEP, IO_RANGE = 'black', -20, [0, 300]  # Parameters for plotting and analysis
+DOT_COLOR, IR_STEP, IO_RANGE = 'black', -20, [0, 400]  # Parameters for plotting and analysis
 WINDOW_SEC = 0.005  # ±5 ms for AP window (Action Potential)
 COMMON_TIME = np.linspace(-WINDOW_SEC, WINDOW_SEC, 1000)  # Time range for AP waveforms
 artist_to_data = {}
 selected_point_artist = None
 selected_annotation = None
+redefine_path = True  # Set to True if working on laptop for path adjustment
 
 # --- Load Updated Data ---
 thresholded = pd.read_csv(f"{ROOT}/1_thresholded_data.csv")
-all_spikes = pd.read_csv(f"{ROOT}/2_all_parameters.csv")  # Optional: spike-level data
-ap_params_df = pd.read_csv(f"{ROOT}/2_averaged_parameters.csv")  # Averaged AP params per recording
+all_spikes = pd.read_csv(f"{ROOT}/3_modified_spikes.csv")  # Optional: spike-level data
+ap_params_df = pd.read_csv(f"{ROOT}/3_modified_averaged_parameters.csv")  # Averaged AP params per recording
 results = pd.read_csv(f"{ROOT}/2_passive_membrane_features.csv")  # RMP and Input Resistance
-results['condition'] = results['recording'].apply(lambda path: os.path.normpath(path).split(os.sep)[-2]) #remove after adjusting spike_params_calculator
-filtered_data = pd.read_csv(f"{ROOT}/3_filtered_data.csv")
+
+# Normalize 'recording' to remove paths if needed, and merge based on just the base recording ID
+def extract_base_recording(rec):
+    return os.path.basename(rec).replace('.abf', '')  # remove path and file extension
+
+# Add base recording ID to all_spikes and results
+all_spikes['base_recording'] = all_spikes['recording'].apply(extract_base_recording)
+results['base_recording'] = results['recording'].apply(extract_base_recording)
+
+# Drop duplicates and merge
+condition_map = all_spikes[['base_recording', 'condition']].drop_duplicates()
+results = results.merge(condition_map, on='base_recording', how='left')
+
+filtered_data = pd.read_csv(f"{ROOT}/4_filtered_data.csv")
+filtered_data['local_sweep'] = filtered_data.groupby(['recording', 'path'])['sweep_number'].transform(lambda x: x - x.min())
+
 
 # --- Standardize column names for passive properties ---
 results = results.rename(columns={
@@ -209,21 +216,30 @@ ap_params_df = ap_params_df[ap_params_df['recording'].isin(valid_recordings)]
 
 # --- Step 5: Load traces from ABF files and extract AP windows ---
 # Function to load data from ABF files
-def load_trace(recording, sweep, abf_dir=f"{ROOT}/abfs"):
+def load_trace(recording, local_sweep, path=None, abf_dir=f"{ROOT}/abfs"):
+    if path is None:
+        # Fallback, but ideally always provide path
+        path = recording
+
     if redefine_path:
         old_user = 'garrett'
         new_user = 'gs075'
-        recording = recording.replace(f'/Users/{old_user}/', f'/Users/{new_user}/')
+        path = path.replace(f'/Users/{old_user}/', f'/Users/{new_user}/')
 
-    path = os.path.join(abf_dir, recording)
-    abf = pyabf.ABF(path)
-    abf.setSweep(sweep)
+    full_path = os.path.join(abf_dir, path)
+    
+    if not os.path.isfile(full_path):
+        raise FileNotFoundError(f"ABF file does not exist: {full_path}")
+
+    abf = pyabf.ABF(full_path)
+    abf.setSweep(local_sweep)
     time = abf.sweepX
     voltage = abf.sweepY
 
     offset = int(len(time) * 0.015625)
     time = np.concatenate([np.zeros(offset), time])[:-offset]
     return time, voltage
+
 
 # Extract the action potential (AP) window around the peak time
 def extract_ap_window(time, voltage, peak_time, window=WINDOW_SEC):
@@ -237,9 +253,12 @@ grouped = ap_params_df.groupby(['recording', 'sweep_number'])
 
 for (rec, sweep), group in grouped:
     cond = group['condition'].iloc[0]
+    path = group['path'].iloc[0]  # full path relative to abf_dir
+    local_sweep = group['local_sweep'].iloc[0]
+
     peaks = group.sort_values('ap_peak_time')['ap_peak_time'].values[:3]
     try:
-        t, v = load_trace(rec, int(sweep))
+        t, v = load_trace(rec, local_sweep, path=path)
         interp_waves = []
         for peak in peaks:
             rt, ap_v = extract_ap_window(t, v, peak)
@@ -411,7 +430,7 @@ for cond in ORDERED_CONDITIONS:
     labels.append(f"{cond} (n={n})")
 
 fig.legend(handles, labels, loc='center', ncol=2, bbox_to_anchor=(0.5, 0.01))
-
+fig.suptitle(FIG_TITLE, fontsize = 20, fontweight = 'bold', color = 'darkgreen')
 
 # Connect pick event to the handler
 fig.canvas.mpl_connect('pick_event', onpick)

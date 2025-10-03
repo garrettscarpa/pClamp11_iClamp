@@ -9,7 +9,8 @@ from scipy.interpolate import interp1d
 ###ADD CONDITION TO ALL_PARAMETERS.CSV
 
 # Path to the CSV file
-file_path = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
+file_path = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+
 
 
 detection_window = 20
@@ -23,6 +24,12 @@ LJP_CORRECTION_MV = 14.681  # LJP Correction (in mV) — this value will be subt
 
 # Load the action potential data
 df_all = pd.read_csv(file_path + "/1_thresholded_data.csv")
+
+df_all['local_sweep'] = (
+    df_all.groupby(['recording', 'path'])['sweep_number']
+    .transform(lambda x: x - x.min())
+)
+
 
 # Preprocessing
 df = df_all[df_all['spike_count'] > 0]  # Filter out rows with zero spike_count
@@ -48,25 +55,30 @@ new_rows = []
 for _, row in df.iterrows():
     recording = row['recording']
     sweep_number = row['sweep_number']
+    local_sweep = row['local_sweep']
     current_injection = row['current_injection']
     spike_count = row['spike_count']
     threshold = row['threshold']
     condition = row['condition']
     timestamps = row['timestamps']
-
+    path = row['path']
     for timestamp in timestamps:
         new_row = {
             'recording': recording,
             'sweep_number': sweep_number,
+            'local_sweep': local_sweep,
             'current_injection': current_injection,
             'spike_count': spike_count,
             'threshold': threshold,
             'condition': condition,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'path': path, 
         }
         new_rows.append(new_row)
 
 peaks = pd.DataFrame(new_rows)
+
+
 
 # Initialize some variables for cycling through the recordings and sweeps
 current_recording_index = 0
@@ -75,13 +87,14 @@ current_peak_index = 0
 
 # Create a new dataframe for the data
 data = pd.DataFrame(columns=[
-    'recording', 'sweep_number', 'current_injection', 'spike_count', 'threshold', 'condition',
+    'recording', 'sweep_number', 'local_sweep', 'current_injection', 'spike_count', 'threshold', 'condition', 'path',
     'timestamp', 'AP_peak_voltage', 'AP_peak_time', 'Threshold', 'AHP_peak', 'AHP_peak_time', 
     'Half_Voltage', 'Half_Width', 'AP_Amplitude', 'AHP_Amplitude', 'first_crossing_idx', 'second_crossing_idx'
 ])
 
 
-def calculate_ap_parameters(time, voltage, ap_peak_time, threshold, abf_sample_rate, detection_window):
+
+def calculate_ap_parameters(time, voltage, ap_peak_time, threshold, abf_sample_rate, all_timestamps):
     import matplotlib.pyplot as plt
     from scipy.interpolate import interp1d
     import numpy as np
@@ -98,13 +111,44 @@ def calculate_ap_parameters(time, voltage, ap_peak_time, threshold, abf_sample_r
     ap_peak_time = time[ap_peak_time_index]
 
     threshold_voltage = np.percentile(voltage[start_idx:ap_peak_idx], 95)
-
-    ahp_peak_window_size = int(detection_window * abf_sample_rate / 1000)
-    ahp_peak_start_idx = ap_peak_time_index
-    ahp_peak_end_idx = min(len(time), ahp_peak_start_idx + ahp_peak_window_size)
-    potential_ahp_peak = np.min(voltage[ahp_peak_start_idx:ahp_peak_end_idx])
-    ahp_peak_time_index = np.argmin(voltage[ahp_peak_start_idx:ahp_peak_end_idx]) + ahp_peak_start_idx
-    ahp_peak_time = time[ahp_peak_time_index]
+    
+    # Find when the voltage returns to baseline (threshold)
+    post_peak_voltage = voltage[ap_peak_time_index:]
+    post_peak_time = time[ap_peak_time_index:]
+    return_idx_relative = np.where(post_peak_voltage <= threshold)[0]
+    
+    if len(return_idx_relative) == 0:
+        # Default to small window after AP if return to baseline not found
+        ahp_start_idx = ap_peak_time_index
+    else:
+        return_idx = return_idx_relative[0] + ap_peak_time_index
+        ahp_start_idx = return_idx
+    
+    # Determine AHP end point: either next spike threshold or 200 ms later
+    ahp_start_time = time[ahp_start_idx]
+    ahp_max_window_end_time = ahp_start_time + 0.050  # 200 ms window
+    
+    # Find next spike after current AP peak
+    future_spikes = [t for t in all_timestamps if t > ap_peak_time]
+    if future_spikes:
+        next_spike_time = future_spikes[0]
+        ahp_end_time = min(next_spike_time, ahp_max_window_end_time)
+    else:
+        ahp_end_time = ahp_max_window_end_time
+    
+    # Get index range
+    ahp_end_idx = np.abs(time - ahp_end_time).argmin()
+    ahp_search_voltage = voltage[ahp_start_idx:ahp_end_idx]
+    ahp_search_time = time[ahp_start_idx:ahp_end_idx]
+    
+    # Find AHP minimum
+    if len(ahp_search_voltage) > 0:
+        potential_ahp_peak = np.min(ahp_search_voltage)
+        ahp_peak_idx_relative = np.argmin(ahp_search_voltage)
+        ahp_peak_time = ahp_search_time[ahp_peak_idx_relative]
+    else:
+        potential_ahp_peak = np.nan
+        ahp_peak_time = np.nan
 
     half_voltage = threshold_voltage + 0.5 * (ap_peak_voltage - threshold_voltage)
 
@@ -132,7 +176,6 @@ def calculate_ap_parameters(time, voltage, ap_peak_time, threshold, abf_sample_r
             print(f"[Warning] Not enough unique voltages for interpolation at AP time {ap_peak_time:.4f}s")
             first_crossing = second_crossing = half_width = np.nan
     else:
-        print(f"[Warning] <2 half-voltage crossings at AP time {ap_peak_time:.4f}s")
         first_crossing = second_crossing = half_width = np.nan
 
     ap_amplitude = ap_peak_voltage - threshold_voltage
@@ -149,10 +192,11 @@ sweep_counters = {}
 # Process each peak (recording, sweep_number, etc.)
 for idx, row in tqdm(peaks.iterrows(), total=peaks.shape[0], desc="Processing Peaks", unit="peak"):
     recording = row['recording']
+    path = row['path']
     sweep_number = row['sweep_number']
     ap_peak_time = row['timestamp']
-    abf = pyabf.ABF(row['recording'])
-    abf.setSweep(row['sweep_number'])
+    abf = pyabf.ABF(path)
+    abf.setSweep(row['local_sweep'])
 
     # Get the voltage trace and time
     time = abf.sweepX
@@ -166,13 +210,21 @@ for idx, row in tqdm(peaks.iterrows(), total=peaks.shape[0], desc="Processing Pe
     time = time[:-offset]  # Remove the excess offset if necessary
     
     # Calculate the action potential parameters
+    timestamps_this_sweep = peaks[
+        (peaks['recording'] == recording) &
+        (peaks['sweep_number'] == sweep_number)
+    ]['timestamp'].tolist()
+    
     ap_peak_voltage, ap_peak_time, threshold_voltage, potential_ahp_peak, ahp_peak_time, half_voltage, half_width, ap_amplitude, ahp_amplitude, first_crossing, second_crossing = calculate_ap_parameters(
-        time, voltage, ap_peak_time, row['threshold'], abf.sampleRate, detection_window)
+        time, voltage, ap_peak_time, row['threshold'], abf.sampleRate, timestamps_this_sweep)
+
 
     # Create a temporary DataFrame for the current row
     new_row = pd.DataFrame([{
         'recording': row['recording'],
         'sweep_number': row['sweep_number'],
+        'local_sweep': row['local_sweep'],
+        'path': row['path'],
         'current_injection': row['current_injection'],
         'spike_count': row['spike_count'],
         'Sweep_threshold': row['threshold'],
@@ -241,20 +293,20 @@ print("\nCalculating RMP and Input Resistance for each recording using 'ssv' col
 for recording in tqdm(unique_recordings, desc="Processing Recordings", unit="recording"):
     
     rec_sweeps = df_all[df_all['recording'] == recording][['sweep_number', 'current_injection', 'ssv']]
-    # Extract ssv values at 0 and -20 pA
+    # Extract ssv values at 0 and -40 pA
     ssv_at_0 = rec_sweeps.loc[rec_sweeps['current_injection'] == 0, 'ssv']
-    ssv_at_minus_20 = rec_sweeps.loc[rec_sweeps['current_injection'] == -20, 'ssv']
+    ssv_at_minus_40 = rec_sweeps.loc[rec_sweeps['current_injection'] == -40, 'ssv']
 
     if not ssv_at_0.empty:
         rmp = ssv_at_0.values[0]
     else:
         rmp = np.nan
 
-    if not ssv_at_0.empty and not ssv_at_minus_20.empty:
+    if not ssv_at_0.empty and not ssv_at_minus_40.empty:
         v0 = ssv_at_0.values[0] / 1000  # convert mV to V
-        v20 = ssv_at_minus_20.values[0] / 1000  # convert mV to V
-        delta_v = v20 - v0
-        delta_i = (-20e-12)  # -20 pA in Amps
+        v40 = ssv_at_minus_40.values[0] / 1000  # convert mV to V
+        delta_v = v40 - v0
+        delta_i = (-40e-12)  # -40 pA in Amps
 
         input_resistance = delta_v / delta_i  # Ohms
         input_resistance = input_resistance / 1e6  # Convert to MΩ
@@ -271,4 +323,3 @@ passive_df = pd.DataFrame(passive_features)
 passive_df.to_csv(os.path.join(file_path, '2_passive_membrane_features.csv'), index=False)
 
 print("RMP and Input Resistance calculations saved to '2_passive_membrane_features.csv'")
-

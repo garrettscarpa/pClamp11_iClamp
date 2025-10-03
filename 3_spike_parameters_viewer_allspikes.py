@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Updated on Fri Apr  4 15:36:35 2025
-
-@author: gs075
-"""
-
 import matplotlib
 
 import numpy as np
@@ -16,7 +8,7 @@ import os
 import re
 
 # Path to the CSV file where spike parameters are already calculated
-spike_parameters_csv_path = root = '/Users/gs075/Desktop/test/2_all_parameters.csv'
+spike_parameters_csv_path = root = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth/2_all_parameters.csv'
 
 sample_rate = 10000
 highlight_window = 10  # ms
@@ -69,6 +61,8 @@ def update_plot():
 
     sweep_row = record_data.iloc[current_sweep_index]
     sweep_number = sweep_row['sweep_number']
+    local_sweep = sweep_row['local_sweep']  # ✅ Get the local sweep index
+    path = sweep_row['path']                # ✅ Get the full file path
     peak_times = sweep_row['timestamp']
 
     if len(peak_times) == 0:
@@ -77,8 +71,8 @@ def update_plot():
 
     peak_time = float(peak_times[current_peak_index])
 
-    abf = pyabf.ABF(os.path.join('/Users/gs075/Desktop/steps_analyses', recording))
-    abf.setSweep(sweep_number)
+    abf = pyabf.ABF(path)                   # ✅ Load the correct file
+    abf.setSweep(local_sweep)              # ✅ Set correct sweep within that file
     time = abf.sweepX
     voltage = abf.sweepY - LJP_CORRECTION_MV
 
@@ -115,8 +109,8 @@ def update_plot():
     ax_zoom.set_xlim(time[start_idx], time[end_idx])
     ax_zoom.set_ylim(np.min(voltage[start_idx:end_idx]), np.max(voltage[start_idx:end_idx]))
 
-    spike_params = spike_params_df[(spike_params_df['recording'] == recording) & 
-                                   (spike_params_df['sweep_number'] == sweep_number)]
+    spike_params = df[(df['recording'] == recording) & 
+                      (df['sweep_number'] == sweep_number)]
 
     if not spike_params.empty:
         closest_peak_idx = np.abs(spike_params['ap_peak_time'] - peak_time).argmin()
@@ -144,7 +138,7 @@ def update_plot():
         ax_zoom.axvline(x=second_crossing, color='brown', linestyle='--')
         ax_zoom.set_title(f"Recording: {recording}, Sweep: {sweep_number}, AP #{ap_count}")
 
-    fig.canvas.draw_idle()  
+    fig.canvas.draw_idle()
 
 def on_key(event):
     global current_recording_index, current_sweep_index, current_peak_index

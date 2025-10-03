@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 
 ###############################################################################
 # User-defined configuration
-parent_folder = '/Volumes/BWH-HVDATA/Individual Folders/Garrett/PatchClamp/Analyses/RSP_Hannah_Farnsworth'
+parent_folder = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
 freq_range = [2, 600]  # Frequency range (spike count)
-input_resistance_range = [10, 200]  # in MΩ, [min, max]
+input_resistance_range = [0, 2000]  # in MΩ, [min, max]
 rmp_range = [-100, -50]  # acceptable RMP range in mV
-half_width_range = [0.0, 4.0]  # in ms, adjust as needed
-ap_amplitude_threshold = 0  # in mV
-ap_peak_voltage_threshold = -100  # in mV (new exclusion)
+half_width_range = [0, 0.75]  # in ms, adjust as needed
+ap_amplitude_threshold = 30  # in mV
+ap_peak_voltage_threshold = -50  # in mV (new exclusion)
+max_firing_rate_range = [2, 2000]  # Example: only include cells with max firing rates between 5 and 50 Hz
 ###############################################################################
 
 # Load the thresholded AP data
@@ -19,7 +20,7 @@ thresholded_path = os.path.join(parent_folder, '1_thresholded_data.csv')
 thresholded_data = pd.read_csv(thresholded_path)
 
 # Load the averaged parameters data (for AP amplitude, AP peak voltage, etc.)
-averaged_path = os.path.join(parent_folder, '2_averaged_parameters.csv')
+averaged_path = os.path.join(parent_folder, '3_modified_averaged_parameters.csv')
 averaged_data = pd.read_csv(averaged_path)
 
 # Load passive membrane features (RMP and input resistance)
@@ -49,22 +50,31 @@ for condition in conditions:
     for recording in np.unique(condition_data['recording']):
         recording_data = condition_data[condition_data['recording'] == recording]
         max_spike_count = recording_data['spike_count'].max()
-        
-        if freq_range[0] <= max_spike_count <= freq_range[1]:
-            valid_recordings.append(recording)
-        else:
+            
+        if not (freq_range[0] <= max_spike_count <= freq_range[1]):
             if max_spike_count < freq_range[0]:
                 reason = f"<{freq_range[0]} Hz"
-            elif max_spike_count > freq_range[1]:
-                reason = f">{freq_range[1]} Hz"
             else:
-                reason = f"within {freq_range[0]}-{freq_range[1]} Hz"
-
+                reason = f">{freq_range[1]} Hz"
+        
             excluded_records.append({
                 'recording': recording,
                 'reason': f'Frequency {reason}',
                 'max_firing_rate': max_spike_count
             })
+            continue
+        
+        # New filter for max firing rate range
+        if not (max_firing_rate_range[0] <= max_spike_count <= max_firing_rate_range[1]):
+            excluded_records.append({
+                'recording': recording,
+                'reason': f'Max firing rate outside {max_firing_rate_range[0]}–{max_firing_rate_range[1]} Hz',
+                'max_firing_rate': max_spike_count
+            })
+            continue
+            
+        valid_recordings.append(recording)
+
 
     filtered_condition_data = condition_data[condition_data['recording'].isin(valid_recordings)]
 
@@ -114,7 +124,7 @@ for condition in conditions:
                 'IR': np.nan
             })
     
-        ir_filtered_data = rmp_filtered_data[rmp_filtered_data['recording'].isin(ir_valid_recordings)]
+    ir_filtered_data = rmp_filtered_data[rmp_filtered_data['recording'].isin(ir_valid_recordings)]
     
 
     # Filter by AP amplitude, AP peak voltage, and Input Resistance (from averaged_data)
@@ -176,11 +186,13 @@ for condition in conditions:
 
 # Combine all filtered data and save
 filtered_data_df = pd.concat(filtered_data, ignore_index=True)
-filtered_data_df.to_csv(os.path.join(parent_folder, '3_filtered_data.csv'), index=False)
+filtered_data_df.to_csv(os.path.join(parent_folder, '4_filtered_data.csv'), index=False)
 
 # Save exclusion log
 excluded_df = pd.DataFrame(excluded_records)
+excluded_df = excluded_df.sort_values(by=['reason', 'recording'], ascending=[True, True])
 excluded_df.to_csv(os.path.join(parent_folder, 'excluded_data.csv'), index=False)
+
 
 
 # Step 1: Assign unique mouse ID from recording path
@@ -237,12 +249,6 @@ ax.legend(title='Recording Date', bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
 
 # Save
-histogram_path = os.path.join(parent_folder, 'max_firing_rate_by_mouse.png')
-plt.savefig(histogram_path, dpi=300)
-plt.show()
-
-
-# Step 7: Save
 histogram_path = os.path.join(parent_folder, 'max_firing_rate_by_mouse.png')
 plt.savefig(histogram_path, dpi=300)
 plt.show()
