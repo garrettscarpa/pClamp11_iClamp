@@ -3,8 +3,8 @@ import pyabf
 import os
 
 ############################## Load the ABF file ##############################
-root = '/Volumes/BWH-HVDATA/Individual Folders/Garrett Scarpa/PatchClamp/Data'
-recording = '2025_09_17_0033'
+root = "/Users/garrett/Desktop/analysis/lfp/V1/removed"
+recording = "2026_02_23_0019_LFP"
 
 abf = pyabf.ABF(os.path.join(root, recording + ".abf"))
 
