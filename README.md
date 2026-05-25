@@ -24,7 +24,7 @@ Run '4_filter_data.py' to remove any low-quality recordings bsed on parameters s
 
 <img width="982" height="590" alt="Image" src="https://github.com/user-attachments/assets/ba763337-b548-4ca4-9b5d-e74b21a57bb6" />
 
-Run 5_plotting.py to generate comparison plots with students t-tests run on column data. Clicking a datapoint reveals the recording it was taken from (or rather the membrane_test recording associated with that cell)
+Run 5_plotting.py to generate comparison plots with students t-tests run on column data. Clicking a datapoint reveals the recording it was taken from (or rather the membrane_test recording associated with that cell). 2 panels available for additional plots.
 
 <img width="1899" height="971" alt="Image" src="https://github.com/user-attachments/assets/be955fee-aac7-4ff4-bbd9-9a37f21c1431" />
 
