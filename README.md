@@ -16,6 +16,15 @@ Run '1_threshold_data.py' to load the current steps data for each cell. You can 
 
 Run '2_all_parameters.py' to automatically extract spike features for each spike detected in '1_threshold_data'. Processing speed is ~60 spikes/sec on my old 2013 macbook, and ~250 spikes/sec on my newer silicone mac. 
 
-Run '3_spike_viewer_limited.py' to display the first 1-3 spikes per cell at rheobase. These are the spikes that will be used for spike feature analysis. You can use the 'allspikes' code if you want to view each and every spike. The user can add spikes by toggling add spike mode to on, and then clicking in the upper image near the spike peak (you might need to zoom in). The user can delete a spike by clicking 'delete' when that spike is displayed. Halfwidth, threshold, and ahp markers can each be adjusted by dragging. Click save to remember your changes upon re-load. 
+Run '3_spike_parameters_viewer_limited.py' to display the first 1-3 spikes per cell at rheobase. These are the spikes that will be used for spike feature analysis. You can use the 'allspikes' code if you want to view each and every spike. The user can add spikes by toggling add spike mode to on, and then clicking in the upper image near the spike peak (you might need to zoom in). The user can delete a spike by clicking 'delete' when that spike is displayed. Halfwidth, threshold, and ahp markers can each be adjusted by dragging. Click save to remember your changes upon re-load. 
 
 <img width="1130" height="677" alt="Image" src="https://github.com/user-attachments/assets/8c96745a-96ed-4337-b487-2eb218b74c9a" />
+
+Run '4_filter_data.py' to remove any low-quality recordings bsed on parameters such as frequency, spike amplitude, peak voltage, etc. You can also use this to separate putative populations based on features such as half-width and input resistance. Upon running, it generates a histogram of cell peak frequency, with color coding based on mouse id. The code assumes that only 1 mouse is recorded per day. The code also generates 4_filtered_data.csv & excluded_data.csv, the latter of which contains recorded justification for each excluded cell. 
+
+<img width="982" height="590" alt="Image" src="https://github.com/user-attachments/assets/ba763337-b548-4ca4-9b5d-e74b21a57bb6" />
+
+Run 5_plotting.py to generate comparison plots with students t-tests run on column data. Clicking a datapoint reveals the recording it was taken from (or rather the membrane_test recording associated with that cell)
+
+<img width="1899" height="971" alt="Image" src="https://github.com/user-attachments/assets/be955fee-aac7-4ff4-bbd9-9a37f21c1431" />
+
