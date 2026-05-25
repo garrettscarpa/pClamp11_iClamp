@@ -8,9 +8,14 @@ Steps_400 is a series of 5 repeats of 1 second current steps ranging from +320 t
 
 You must independently calculate your liquid junction potential and enter it, or else enter 0. 
 
-Run '0_filename_protocol_merger' to append protocol name to the recording (I use a separate folder than where raw data is kept)
+Run '0_filename_protocol_merger.py' to append protocol name to the recording (I use a separate folder than where raw data is kept)
 
-Run '1_threshold_data' to load the current steps data for each cell. You can adjust the thresholding with the cursor. Left and right arrows cycle between sweeps, and the next/previous cell buttons cycle between cells. Save your data for automatic re-loading mid-analysis.
+Run '1_threshold_data.py' to load the current steps data for each cell. You can adjust the thresholding with the cursor. Left and right arrows cycle between sweeps, and the next/previous cell buttons cycle between cells. Save your data for automatic re-loading mid-analysis. Upon save, generates '1_thresholded_data.csv'
 
 <img width="784" height="587" alt="Image" src="https://github.com/user-attachments/assets/ce2f0bb5-d468-49e7-a156-ed84455b1759" />
 
+Run '2_all_parameters.py' to automatically extract spike features for each spike detected in '1_threshold_data'. Processing speed is ~60 spikes/sec on my old 2013 macbook, and ~250 spikes/sec on my newer silicone mac. 
+
+Run '3_spike_viewer_limited.py' to display the first 1-3 spikes per cell at rheobase. These are the spikes that will be used for spike feature analysis. You can use the 'allspikes' code if you want to view each and every spike. The user can add spikes by toggling add spike mode to on, and then clicking in the upper image near the spike peak (you might need to zoom in). The user can delete a spike by clicking 'delete' when that spike is displayed. Halfwidth, threshold, and ahp markers can each be adjusted by dragging. Click save to remember your changes upon re-load. 
+
+[Spikes.pdf](https://github.com/user-attachments/files/28229008/Spikes.pdf)
