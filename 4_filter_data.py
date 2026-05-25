@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 ###############################################################################
 # User-defined configuration
-parent_folder = '/Users/gs075/Desktop/Data/Patch/400pA_V1_RSP_HF'
+parent_folder = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 freq_range = [2, 6000]  # Frequency range (spike count)
 input_resistance_range = [0, 2000]  # in MΩ, [min, max]
 rmp_range = [-100, -50]  # acceptable RMP range in mV

@@ -8,7 +8,7 @@ import os
 import re
 
 # Path to the CSV file where spike parameters are already calculated
-spike_parameters_csv_path = root = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth/2_all_parameters.csv'
+spike_parameters_csv_path = root = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 
 sample_rate = 10000
 highlight_window = 10  # ms

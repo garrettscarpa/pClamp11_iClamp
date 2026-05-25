@@ -15,7 +15,7 @@ import pandas as pd
 from matplotlib.widgets import Slider, TextBox, Button
 
 # --- User parameters ---
-root = '/Users/gs075/Desktop/Data'
+root = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 protocols_of_interest = ['membrane_test', 'Steps_300', 'Steps_400']
 min_isi = 1  # ms
 threshold = 0  # default slider threshold

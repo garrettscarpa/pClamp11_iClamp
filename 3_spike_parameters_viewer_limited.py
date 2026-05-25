@@ -10,7 +10,7 @@ import os
 from scipy.interpolate import interp1d
 
 # === CONFIGURATION ===
-root = '/Users/gs075/Desktop/Data/Patch/400pA_RSP_HF_2ndCohort'
+root = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 
 sample_rate = 10000
 highlight_window = 20  # ms

@@ -9,7 +9,7 @@ from scipy.interpolate import interp1d
 ###ADD CONDITION TO ALL_PARAMETERS.CSV
 
 # Path to the CSV file
-file_path = '/Users/gs075/Desktop/Data'
+file_path = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 
 
 

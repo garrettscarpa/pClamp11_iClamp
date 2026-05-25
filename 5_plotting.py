@@ -10,11 +10,11 @@ from scipy.interpolate import interp1d  # Importing interp1d for interpolation
 import pyabf
 
 # --- Settings ---
-ROOT = '/Volumes/BWH-HVDATA/Individual Folders/Garrett Scarpa/Ephys/Patch and LFP/Analyses/Patch/HF_RSP_Plexxikon'
+ROOT = '/Users/garrett/Desktop/Analyses/Patch Clamp'
 
-FIG_TITLE = "Long half-width: 0.8+ ms"
-ORDERED_CONDITIONS = ['control', 'plexxikon']  # Conditions to compare
-COLOR_MAP = {'control': 'dimgrey', 'plexxikon': 'tomato'}  # Colors for plotting
+FIG_TITLE = "Sample Data"
+ORDERED_CONDITIONS = ['Condition 1', 'Condition 2']  # Conditions to compare
+COLOR_MAP = {'Condition 1': 'dimgrey', 'Condition 2': 'tomato'}  # Colors for plotting
 DOT_COLOR, IR_STEP, IO_RANGE = 'black', -20, [0, 300]  # Parameters for plotting and analysis
 WINDOW_SEC = 0.005  # ±5 ms for AP window (Action Potential)
 COMMON_TIME = np.linspace(-WINDOW_SEC, WINDOW_SEC, 1000)  # Time range for AP waveforms
