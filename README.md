@@ -2,7 +2,7 @@ This collection of scripts is for classifying patch clamp data in the current cl
 
 membrane_test is a 1 second train of membrane test pulses (5 mV, 5 ms I think). The important thing is that when you collect a v-clamp recording, it automatically logs the capacitence, which is used for plotting. 
 
-Steps_300 is a series of 20 repeats of  1 second current steps ranging from -100 to +300 pA (20 pA steps). 
+Steps_300 is a series of 20 repeats of 1 second current steps ranging from -100 to +300 pA (20 pA steps). Each current step is flanked by a 0 pA step for 0.25 seconds. 
 
 Steps_400 is a series of 5 repeats of 1 second current steps ranging from +320 to +400 pA.
 
@@ -13,3 +13,4 @@ Run '0_filename_protocol_merger' to append protocol name to the recording (I use
 Run '1_threshold_data' to load the current steps data for each cell. You can adjust the thresholding with the cursor. Left and right arrows cycle between sweeps, and the next/previous cell buttons cycle between cells. Save your data for automatic re-loading mid-analysis.
 
 <img width="784" height="587" alt="Image" src="https://github.com/user-attachments/assets/ce2f0bb5-d468-49e7-a156-ed84455b1759" />
+
