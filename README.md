@@ -18,4 +18,4 @@ Run '2_all_parameters.py' to automatically extract spike features for each spike
 
 Run '3_spike_viewer_limited.py' to display the first 1-3 spikes per cell at rheobase. These are the spikes that will be used for spike feature analysis. You can use the 'allspikes' code if you want to view each and every spike. The user can add spikes by toggling add spike mode to on, and then clicking in the upper image near the spike peak (you might need to zoom in). The user can delete a spike by clicking 'delete' when that spike is displayed. Halfwidth, threshold, and ahp markers can each be adjusted by dragging. Click save to remember your changes upon re-load. 
 
-[Spikes.pdf](https://github.com/user-attachments/files/28229008/Spikes.pdf)
+<img width="1130" height="677" alt="Image" src="https://github.com/user-attachments/assets/8c96745a-96ed-4337-b487-2eb218b74c9a" />
