@@ -29,4 +29,4 @@ Run 5_plotting.py to generate comparison plots with students t-tests run on colu
 <img width="1899" height="971" alt="Image" src="https://github.com/user-attachments/assets/be955fee-aac7-4ff4-bbd9-9a37f21c1431" />
 
 
-The sample data and analysis files used to generate these images are available in the folder Patch Clamp.
+The sample data and analysis files used to generate these images are available in the folder Patch Clamp. You will need to re-analyze, as the paths in the results files will be different.
