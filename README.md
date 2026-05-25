@@ -5,4 +5,3 @@ Steps_400 is a series of 5 repeats of 1 second current steps ranging from +320 t
 You must independently calculate your liquid junction potential and enter it, or else enter 0. 
 Run '0_filename_protocol_merger' to append protocol name to the recording (I use a separate folder than where raw data is kept)
 Run '1_threshold_data' to load the current steps data for each cell. You can adjust the thresholding with the cursor. Left and right arrows cycle between sweeps, and the next/previous cell buttons cycle between cells. Save your data for automatic re-loading mid-analysis.
-[1_threshold_data.pdf](https://github.com/user-attachments/files/28228596/1_threshold_data.pdf)
