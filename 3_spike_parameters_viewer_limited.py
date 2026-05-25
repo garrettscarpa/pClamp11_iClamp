@@ -10,7 +10,7 @@ import os
 from scipy.interpolate import interp1d
 
 # === CONFIGURATION ===
-root = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+root = '/Users/gs075/Desktop/Data/Patch/400pA_RSP_HF_2ndCohort'
 
 sample_rate = 10000
 highlight_window = 20  # ms
@@ -43,13 +43,30 @@ spike_params_df['timestamp'] = spike_params_df['timestamp'].apply(clean_timestam
 if os.path.exists(modified_csv):
     df = pd.read_csv(modified_csv)
 else:
-    df = (
-        spike_params_df
-        .sort_values(by=['recording', 'ap_peak_time'])
-        .groupby('recording')
-        .head(3)
-        .reset_index(drop=True)
+
+    spike_params_df = spike_params_df.sort_values(
+        by=['recording', 'current_injection', 'ap_peak_time']
     )
+
+    rheobase_rows = []
+
+    for recording, rec_df in spike_params_df.groupby('recording'):
+
+        # find the first sweep that contains spikes
+        first_spiking_sweep = rec_df[rec_df['spike_count'] > 0]['sweep_number'].min()
+
+        if pd.isna(first_spiking_sweep):
+            continue
+
+        # select spikes from that sweep
+        rheo_spikes = rec_df[rec_df['sweep_number'] == first_spiking_sweep]
+
+        # keep only first 3 spikes
+        rheo_spikes = rheo_spikes.sort_values('ap_peak_time').head(3)
+
+        rheobase_rows.append(rheo_spikes)
+
+    df = pd.concat(rheobase_rows).reset_index(drop=True)
 
 def calculate_steady_state_voltage(time, voltage, t_start, t_end, rate):
     start_idx = np.abs(time - t_start).argmin()
@@ -431,15 +448,9 @@ def save_csv(event):
             continue  # These were merge keys, so they won't have '_meta' suffix
         meta_col = col + '_meta'
         if meta_col in updated_df.columns:
-            for col in metadata_cols:
-                if col in ['recording', 'sweep_number']:
-                    continue  # Skip merge keys
-                meta_col = col + '_meta'
-                if meta_col in updated_df.columns:
-                    # Clean up known problem types (e.g., empty strings)
-                    cleaned_meta = updated_df[meta_col].replace('', np.nan)
-                    df[col] = df[col].combine_first(cleaned_meta)
-   
+            cleaned_meta = updated_df[meta_col].replace('', np.nan)
+            df[col] = df[col].combine_first(cleaned_meta)
+
     # Recalculate half_voltage before saving
     df['half_voltage'] = df.apply(
         lambda row: row['ap_threshold'] + 0.5 * (row['ap_peak_voltage'] - row['ap_threshold'])
@@ -447,15 +458,19 @@ def save_csv(event):
         axis=1
     )
 
-    # Save final version
+    # Calculate half_width and convert negative values to absolute
     df['half_width'] = (df['second_crossing'] - df['first_crossing']) * 1000  # convert to ms
+    df['half_width'] = df['half_width'].abs()  # <-- ensure all half-widths are positive
 
+    # Ensure ap_peak_time is a float
     df['ap_peak_time'] = df['ap_peak_time'].apply(
-    lambda x: x[0] if isinstance(x, list) else float(x))
+        lambda x: x[0] if isinstance(x, list) else float(x)
+    )
 
     output_path = os.path.join(root, "3_modified_spikes.csv")
     df.to_csv(output_path, index=False)
 
+    # Create averaged parameters for first 3 spikes per recording
     averaged_rows = []
     for rec in df['recording'].unique():
         rec_df = df[df['recording'] == rec].sort_values('ap_peak_time').head(3)

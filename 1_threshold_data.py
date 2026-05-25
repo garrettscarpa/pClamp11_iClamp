@@ -15,7 +15,7 @@ import pandas as pd
 from matplotlib.widgets import Slider, TextBox, Button
 
 # --- User parameters ---
-root = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+root = '/Users/gs075/Desktop/Data'
 protocols_of_interest = ['membrane_test', 'Steps_300', 'Steps_400']
 min_isi = 1  # ms
 threshold = 0  # default slider threshold
@@ -197,17 +197,31 @@ def update_plot(recording_index, sweep_number):
     ssv = calculate_steady_state_voltage(time_filtered, voltage_filtered,
                                          temporal_range_start, temporal_range_end, merged_cell.sample_rate)
 
-    # Detect spikes based on threshold crossing and min ISI
+    # Detect spikes based on threshold crossing with proper refractory handling
     detected_peaks = []
-    last_crossing = -latency_samples
-    crossings = np.where(voltage_filtered > sweep_threshold)[0]
-    for idx in crossings:
-        if idx - last_crossing > latency_samples:
-            win_start = max(0, idx - window_samples)
-            win_end = min(len(voltage_filtered), idx + window_samples)
+
+    above = voltage_filtered > sweep_threshold
+    i = 0
+    n = len(voltage_filtered)
+
+    while i < n:
+        if above[i]:
+            # start of a spike
+            win_start = max(0, i - window_samples)
+            win_end = min(n, i + window_samples)
+
             peak_idx = np.argmax(voltage_filtered[win_start:win_end]) + win_start
-            detected_peaks.append((time_filtered[peak_idx], voltage_filtered[peak_idx]))
-            last_crossing = idx
+            detected_peaks.append(
+                (time_filtered[peak_idx], voltage_filtered[peak_idx])
+            )
+
+            # skip forward through this spike + refractory period
+            i = peak_idx + latency_samples
+            while i < n and above[i]:
+                i += 1
+        else:
+            i += 1
+
 
     timestamps = [pt for pt, _ in detected_peaks]
     rel_path = os.path.relpath(membrane_test_file, root)

@@ -12,8 +12,8 @@ import os
 from matplotlib.widgets import Slider
 
 # Load the ABF file
-root = '/Users/gs075/Documents/HVDriveBackup/Data_Renamed'
-file = '2025_05_06_0031_Steps_300'
+root = '/Volumes/BWH-HVDATA/Individual Folders/Garrett Scarpa/PatchClamp/Data'
+file = '2026_02_18_0039'
 
 min_isi = 2         # Set minimum inter-spike-interval
 window_start = 0.25  # in ms, user-defined start time

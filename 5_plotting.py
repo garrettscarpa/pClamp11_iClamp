@@ -10,18 +10,65 @@ from scipy.interpolate import interp1d  # Importing interp1d for interpolation
 import pyabf
 
 # --- Settings ---
-ROOT = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+ROOT = '/Volumes/BWH-HVDATA/Individual Folders/Garrett Scarpa/Ephys/Patch and LFP/Analyses/Patch/HF_RSP_Plexxikon'
 
-FIG_TITLE = "Half Width: 0 - 0.75 ms"
-ORDERED_CONDITIONS = ['control', 'tumor']  # Conditions to compare
-COLOR_MAP = {'control': 'dimgrey', 'tumor': 'tomato'}  # Colors for plotting
-DOT_COLOR, IR_STEP, IO_RANGE = 'black', -20, [0, 400]  # Parameters for plotting and analysis
+FIG_TITLE = "Long half-width: 0.8+ ms"
+ORDERED_CONDITIONS = ['control', 'plexxikon']  # Conditions to compare
+COLOR_MAP = {'control': 'dimgrey', 'plexxikon': 'tomato'}  # Colors for plotting
+DOT_COLOR, IR_STEP, IO_RANGE = 'black', -20, [0, 300]  # Parameters for plotting and analysis
 WINDOW_SEC = 0.005  # ±5 ms for AP window (Action Potential)
 COMMON_TIME = np.linspace(-WINDOW_SEC, WINDOW_SEC, 1000)  # Time range for AP waveforms
 artist_to_data = {}
 selected_point_artist = None
 selected_annotation = None
 redefine_path = True  # Set to True if working on laptop for path adjustment
+LJP_CORRECTION_MV = 14.681  # mV, subtract from recorded voltages
+
+# --- Build ABF file index (ONLY ONCE) ---
+all_files = []
+for root, _, files in os.walk(ROOT):
+    for f in files:
+        if f.endswith(".abf"):
+            all_files.append(os.path.join(root, f))
+
+print(f"Indexed {len(all_files)} ABF files")
+
+
+# --- Smart matcher for Steps_300 files ---
+def extract_index(name):
+    m = re.search(r'_(\d{4})', name)
+    return int(m.group(1)) if m else None
+
+
+def find_best_abf(recording):
+    base = os.path.basename(recording)
+    date = "_".join(base.split("_")[:3])
+    rec_idx = extract_index(base)
+
+    candidates = []
+
+    for f in all_files:
+        # ONLY use Steps_300 files
+        if "Steps_300.abf" not in f:
+            continue
+
+        if date not in f:
+            continue
+
+        idx = extract_index(f)
+        if idx is not None:
+            candidates.append((abs(idx - rec_idx), f))
+
+    if not candidates:
+        raise FileNotFoundError(f"No Steps_300 file for {recording}")
+
+    best = sorted(candidates, key=lambda x: x[0])[0]
+
+    # DEBUG (keep this!)
+    print(f"{recording} → {os.path.basename(best[1])} (Δ={best[0]})")
+
+    return best[1]
+
 
 # --- Load Updated Data ---
 thresholded = pd.read_csv(f"{ROOT}/1_thresholded_data.csv")
@@ -57,13 +104,26 @@ thresholded = thresholded[thresholded['recording'].isin(valid_recordings)]
 ap_params_df = ap_params_df[ap_params_df['recording'].isin(valid_recordings)]
 results = results[results['recording'].isin(valid_recordings)]
 
+# =========================
+# SAMPLE SIZE HELPERS (cell n, animal N)
+# =========================
+
+def extract_animal_id(rec):
+    """
+    Animal ID = first 3 underscore-delimited tokens of filename
+    Matches logic used in improved script
+    """
+    return '_'.join(os.path.basename(rec).split('_')[:3])
+
+for df in [results, ap_params_df, filtered_data]:
+    if 'recording' in df.columns:
+        df['animal_id'] = df['recording'].apply(extract_animal_id)
 
 # --- Helper Functions for Statistics and Plotting ---
-# T-test for comparing two conditions
 def t_test_by_condition(df, col):
     a = df[df['condition'] == ORDERED_CONDITIONS[0]][col]
     b = df[df['condition'] == ORDERED_CONDITIONS[1]][col]
-    return stats.ttest_ind(a, b).pvalue
+    return stats.ttest_ind(a, b, equal_var=False).pvalue
 
 def plot_data(ax, df, y, title):
     p = t_test_by_condition(df, y)
@@ -80,8 +140,14 @@ def plot_data(ax, df, y, title):
 
     ax.set_title(f'{title} (p = {p:.4f})')
     for cond in ORDERED_CONDITIONS:
-        n = df[df['condition'] == cond]['recording'].nunique()
-        ax.plot([], [], marker='s', label=f"{cond} (n={n})", color=COLOR_MAP[cond])
+        subset = df[df['condition'] == cond]
+        n = subset['recording'].nunique()
+        N = subset['animal_id'].nunique()
+        
+        ax.plot([], [], marker='s',
+                label=f"{cond} (n={n}, N={N})",
+                color=COLOR_MAP[cond])
+
     ax.set_xlabel("")  # Removes the 'condition' label on the x-axis
     return swarm
 
@@ -102,87 +168,125 @@ def plot_ap_param(ax, df, y, title):
 
     ax.set_title(f'{title} (p = {p:.4f})' if p >= 0.0001 else f'{title} (p < 0.0001)')
     for cond in ORDERED_CONDITIONS:
-        n = df[df['condition'] == cond]['recording'].nunique()
-        ax.plot([], [], marker='s', label=f"{cond} (n={n})", color=COLOR_MAP[cond])
+        subset = df[df['condition'] == cond]
+        n = subset['recording'].nunique()
+        N = subset['animal_id'].nunique()
+        
+        ax.plot([], [], marker='s',
+                label=f"{cond} (n={n}, N={N})",
+                color=COLOR_MAP[cond])
+
     ax.set_xlabel("")
 
 def onpick(event):
+    """
+    Universal pick handler for all swarm/strip plots.
+    Highlights the clicked point and shows its identity (recording, value, condition).
+    Works for AP parameters, rheobase, capacitance, and 300 pA output.
+    """
     global selected_point_artist, selected_annotation
 
-    if isinstance(event.artist, PathCollection):
-        ind = event.ind
-        if len(ind) == 0:
-            return
+    if not isinstance(event.artist, PathCollection):
+        return
 
-        offset = event.artist.get_offsets()[ind[0]]
-        x_clicked, y_clicked = offset
+    # Get the index of the clicked point in the collection
+    ind = event.ind
+    if len(ind) == 0:
+        return
 
-        y_clicked = round(float(y_clicked), 4)
-        x_categories = ORDERED_CONDITIONS
+    # Coordinates of the clicked point
+    offset = event.artist.get_offsets()[ind[0]]
+    x_clicked, y_clicked = offset
+    y_clicked = round(float(y_clicked), 4)
 
-        try:
-            x_index = int(round(x_clicked))
-            x_clicked = x_categories[x_index]
-        except (IndexError, ValueError):
-            return
+    # Find the axis and corresponding x-tick labels
+    ax = event.artist.axes
+    x_ticks = [tick.get_text() for tick in ax.get_xticklabels()]
+    tick_positions = ax.get_xticks()
 
-        # Clear previous highlight/annotation
-        if selected_point_artist:
-            selected_point_artist.remove()
-            selected_point_artist = None
-        if selected_annotation:
-            selected_annotation.remove()
-            selected_annotation = None
+    if not x_ticks:
+        return
 
-        # Find the axis this was clicked in
-        ax = event.artist.axes
-                
-        # Loop through all dataframes to find the matching row
-        for df in [results, rheos, ap_params_df, capacitance_data]:
-            possible_rows = df[df['condition'] == x_clicked]
+    # Map x_clicked to the closest x-tick label (works for jitter/hue)
+    x_clicked_str = min(x_ticks, key=lambda t: abs(tick_positions[x_ticks.index(t)] - x_clicked))
+
+    # Clear previous highlight and annotation
+    if selected_point_artist:
+        selected_point_artist.remove()
+        selected_point_artist = None
+    if selected_annotation:
+        selected_annotation.remove()
+        selected_annotation = None
+
+    # Loop through all relevant DataFrames
+    dataframes = [results, rheos, ap_params_df, capacitance_data, io_300_rec]
+    y_cols = ['RMP', 'IR (megaohm)', 'rheobase', 'value',
+              'ap_peak_voltage', 'ahp_peak', 'half_width',
+              'ap_amplitude', 'ahp_amplitude', 'ap_threshold',
+              'spike_count']
+
+    match_row = None
+    matched_col = None
+    for df in dataframes:
+        if 'condition' not in df.columns:
+            continue
+
+        possible_rows = df[df['condition'] == x_clicked_str]
+        for col in y_cols:
+            if col not in possible_rows.columns:
+                continue
             for _, row in possible_rows.iterrows():
-                for param in ['RMP', 'IR (megaohm)', 'rheobase', 'value',
-                              'ap_peak_voltage', 'ahp_peak', 'half_width',
-                              'ap_amplitude', 'ahp_amplitude', 'ap_threshold']:
-        
-                    if param in row and pd.notnull(row[param]):
-                        val = round(float(row[param]), 4)
-                        if val == y_clicked:
-                            # Found the matching datapoint
-                            recording = row.get('recording', row.get('filename', ''))
-                            trimmed = recording.split('steps_analyses/')[-1] if 'steps_analyses/' in recording else recording
-                            label = f"{trimmed}\n{param} = {val} ({x_clicked})"
-        
-                            # Highlight the selected point with the correct x/y coordinates
-                            selected_point_artist = ax.plot(x_clicked, y_clicked, 'o', color='red', markersize=6, zorder=10)[0]
-        
-                            # Annotate it with the label
-                            selected_annotation = ax.annotate(
-                                label,
-                                (x_clicked, y_clicked),
-                                textcoords="offset points",
-                                xytext=(10, 10),  # Adjust this for label placement
-                                ha='left',
-                                fontsize=9,
-                                bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="black", lw=0.8),  # solid white background
-                                arrowprops=dict(arrowstyle="->", color='black', lw=0.8),
-                                zorder=1000  # ensures it's on top
-                            )
-        
-                            event.canvas.draw_idle()
-                            print(f"Clicked on datapoint: Recording = {trimmed}, Condition = {x_clicked}, Parameter = {param}")
-                            return
+                val = row[col]
+                if pd.notnull(val) and round(float(val), 4) == y_clicked:
+                    match_row = row
+                    matched_col = col
+                    break
+            if match_row is not None:
+                break
+        if match_row is not None:
+            break
+
+    if match_row is None:
+        # No match found
+        return
+
+    # Get recording/filename
+    recording = match_row.get('recording', match_row.get('filename', ''))
+    trimmed = recording.split('steps_analyses/')[-1] if 'steps_analyses/' in recording else recording
+
+    # Highlight the selected point
+    selected_point_artist = ax.plot(x_clicked_str, y_clicked, 'o', color='red', markersize=6, zorder=10)[0]
+
+    # Annotate it
+    selected_annotation = ax.annotate(
+        f"{trimmed}\n{matched_col} = {y_clicked} ({x_clicked_str})",
+        (x_clicked_str, y_clicked),
+        textcoords="offset points",
+        xytext=(10, 10),
+        ha='left',
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="black", lw=0.8),
+        arrowprops=dict(arrowstyle="->", color='black', lw=0.8),
+        zorder=1000
+    )
+
+    # Refresh figure
+    event.canvas.draw_idle()
+    print(f"Clicked on datapoint: Recording = {trimmed}, Condition = {x_clicked_str}, Parameter = {matched_col}")
 
 
 # --- Step 2: Rheobase Calculation ---
 # Rheobase is the minimal current injection needed to generate a spike
 rheos = filtered_data[filtered_data['current_injection'] > 0]
 rheos = rheos[rheos['spike_count'] > 0].groupby(['recording', 'condition'])['current_injection'].min().reset_index(name='rheobase')
+rheos['animal_id'] = rheos['recording'].apply(extract_animal_id)
 
 # --- Step 3: Input/Output Curve ---
 # Filter data for current injections within the defined range (IO_RANGE)
 io_df = filtered_data[(filtered_data['current_injection'] >= IO_RANGE[0]) & 
                       (filtered_data['current_injection'] <= IO_RANGE[1])]
+
+
 
 # --- Step 4: Average first 1–3 APs per recording at rheobase ---
 # For each recording, get the first sweep and average the first 3 APs
@@ -212,34 +316,23 @@ for (rec, sweep), group in rheo_df[rheo_df['ap_count'] > 0].groupby(['recording'
 # Convert the averaged action potential parameters into a DataFrame
 ap_params_df = pd.DataFrame(filtered_ap_rows)
 ap_params_df = ap_params_df[ap_params_df['recording'].isin(valid_recordings)]
+ap_params_df['animal_id'] = ap_params_df['recording'].apply(extract_animal_id)
 
 
-# --- Step 5: Load traces from ABF files and extract AP windows ---
-# Function to load data from ABF files
-def load_trace(recording, local_sweep, path=None, abf_dir=f"{ROOT}/abfs"):
-    if path is None:
-        # Fallback, but ideally always provide path
-        path = recording
-
-    if redefine_path:
-        old_user = 'garrett'
-        new_user = 'gs075'
-        path = path.replace(f'/Users/{old_user}/', f'/Users/{new_user}/')
-
-    full_path = os.path.join(abf_dir, path)
-    
-    if not os.path.isfile(full_path):
-        raise FileNotFoundError(f"ABF file does not exist: {full_path}")
+def load_trace(recording, local_sweep, path=None, abf_dir=ROOT):
+    # IGNORE 'path' completely — it is unreliable
+    full_path = find_best_abf(recording)
 
     abf = pyabf.ABF(full_path)
     abf.setSweep(local_sweep)
+
     time = abf.sweepX
-    voltage = abf.sweepY
+    voltage = abf.sweepY - LJP_CORRECTION_MV
 
     offset = int(len(time) * 0.015625)
     time = np.concatenate([np.zeros(offset), time])[:-offset]
-    return time, voltage
 
+    return time, voltage
 
 # Extract the action potential (AP) window around the peak time
 def extract_ap_window(time, voltage, peak_time, window=WINDOW_SEC):
@@ -274,8 +367,9 @@ for (rec, sweep), group in grouped:
 
 # --- Step 7: Plot average AP waveforms in subplots ---
 # Set up subplots for various analyses
-fig, axs = plt.subplots(4, 3, figsize=(18, 18))
+fig, axs = plt.subplots(4, 4, figsize=(24, 18))
 axs = axs.flatten()
+
 
 
 # Plot data for various parameters and enable picking
@@ -293,6 +387,7 @@ for coll in swarm_rheo.collections:
 
 # Set formatted title for rheobase plot
 axs[2].set_title(f'Rheobase (p = {p_rheo:.4f})' if p_rheo >= 0.0001 else 'Rheobase (p < 0.0001)')
+axs[2].set_xlabel('')  # <-- add this line
 
 # Plot AP parameter data
 plot_ap_param(axs[3], ap_params_df, 'ap_peak_voltage', 'Action Potential Peak Voltage')
@@ -305,65 +400,138 @@ plot_ap_param(axs[8], ap_params_df, 'ap_threshold', 'Action Potential Threshold'
 # --- Customize labels and title for waveforms plot ---
 ax_waveforms = axs[10]
 for cond, waveforms_cond in waveforms.items():
-    mean_wave = np.mean(np.vstack(waveforms_cond), axis=0)
-    sem_wave = np.std(np.vstack(waveforms_cond), axis=0) / np.sqrt(len(waveforms_cond))
-    sample_size = len(waveforms_cond)
-    ax_waveforms.plot(COMMON_TIME, mean_wave, label=f"{cond} (n={sample_size})", color=COLOR_MAP[cond])
+    if len(waveforms_cond) == 0:
+        print(f"No waveforms for {cond}, skipping")
+        continue
+
+    waves = np.vstack(waveforms_cond)
+
+    mean_wave = np.mean(waves, axis=0)
+    sem_wave = np.std(waves, axis=0) / np.sqrt(len(waveforms_cond))
+    subset = ap_params_df[ap_params_df['condition'] == cond]
+    n = subset['recording'].nunique()
+    N = subset['animal_id'].nunique()
+    
+    ax_waveforms.plot(COMMON_TIME, mean_wave,
+                      label=f"{cond} (n={n}, N={N})",
+                      color=COLOR_MAP[cond])
     ax_waveforms.fill_between(COMMON_TIME, mean_wave - sem_wave, mean_wave + sem_wave, 
                                color=COLOR_MAP[cond], alpha=0.3)
+for cond in ORDERED_CONDITIONS:
+    subset = rheos[rheos['condition'] == cond]
+    n = subset['recording'].nunique()
+    N = subset['animal_id'].nunique()
+    axs[2].plot([], [], marker='s',
+                label=f"{cond} (n={n}, N={N})",
+                color=COLOR_MAP[cond])
 
 # Customize labels and title for waveforms plot
 ax_waveforms.set_title("AP Waveforms by Condition")
 ax_waveforms.set_xlabel("Time (s)")
 ax_waveforms.set_ylabel("Adjusted Vm")
 
-# --- Input/Output Curve ---
-ax10 = axs[11]  # Position of subplot 10
+ax10 = axs[11]  # Subplot for I/O curve
+
 for cond in ORDERED_CONDITIONS:
     c_data = io_df[io_df['condition'] == cond]
-    grouped = c_data.groupby('current_injection')['spike_count']
+    
+    # Step 1: Average across sweeps **per cell**
+    cell_avg = c_data.groupby(['recording', 'current_injection'])['spike_count'].mean().reset_index()
+    
+    # Step 2: Average across cells for the condition
+    grouped = cell_avg.groupby('current_injection')['spike_count']
     avg, sem = grouped.mean(), grouped.sem()
-    n = c_data['recording'].nunique()
-    ax10.plot(avg.index, avg, label=f"{cond} (n={n})", color=COLOR_MAP[cond])
+    
+    # Count of unique cells (n) and animals (N)
+    n = cell_avg['recording'].nunique()
+    N = cell_avg['recording'].map(lambda r: extract_animal_id(r)).nunique()
+    
+    ax10.plot(avg.index, avg,
+              label=f"{cond} (n={n}, N={N})",
+              color=COLOR_MAP[cond])
     ax10.fill_between(avg.index, avg - sem, avg + sem, color=COLOR_MAP[cond], alpha=0.2)
+
 ax10.set_xlabel('Current Injection (pA)')
-ax10.set_ylabel('Average Spike Count')
+ax10.set_ylabel('Spike Count')
 ax10.set_title('Input/Output Curve')
+# --- Step 10: Peak Output Frequency per Recording ---
 
-# --- Step 10: Plot Capacitance ---
-# Collect capacitance data and perform statistical test
-def parse_abf_metadata(file_paths):
-    parsed_data = []
-    for path in file_paths:
-        abf = pyabf.ABF(path)
-        lines = abf.headerText.splitlines()
-        condition = os.path.basename(os.path.dirname(path))
-        for line in lines:
-            if any(key in line for key in ["fTelegraphMembraneCap", "fTelegraphAccessResistance"]):
-                dtype = "Membrane_Capacitance" if "MembraneCap" in line else "Access_Resistance"
-                match = re.search(r"\[([\d.eE+-]+)", line)
-                value = float(match.group(1)) if match else None
-                parsed_data.append({
-                    'filename': os.path.basename(path),
-                    'condition': condition,
-                    'data_type': dtype,
-                    'value': value,
-                    'protocol': abf.protocol
-                })
-    return parsed_data
+# Compute "peak frequency" = sweep with highest average output per recording
+peak_freq_df = []
 
-# --- Step 9: Collect closest ABF file paths ---
-def find_closest_abf_files(filtered_df, root_dir):
-    trimmed_ids = ['_'.join(os.path.basename(rec).split('_')[:4]) for rec in filtered_df['recording'].unique()]
+for rec, group in io_df.groupby('recording'):
+    cond = group['condition'].iloc[0]
+    # Average spike count per sweep
+    sweep_avg = group.groupby('sweep_number')['spike_count'].mean()
+    if not sweep_avg.empty:
+        max_avg = sweep_avg.max()  # take sweep with highest output
+        peak_freq_df.append({
+            'recording': rec,
+            'condition': cond,
+            'peak_frequency': max_avg
+        })
+
+peak_freq_df = pd.DataFrame(peak_freq_df)
+peak_freq_df['animal_id'] = peak_freq_df['recording'].apply(extract_animal_id)
+
+# --- Plot peak frequency / output in axs[13] ---
+ax_pf = axs[13]
+
+# Compute p-value
+p_pf = t_test_by_condition(peak_freq_df, 'peak_frequency')
+
+# Boxplot
+sns.boxplot(
+    x='condition',
+    y='peak_frequency',
+    data=peak_freq_df,
+    order=ORDERED_CONDITIONS,
+    palette=COLOR_MAP,
+    showfliers=False,
+    ax=ax_pf,
+    hue='condition'
+)
+
+# Swarmplot for picking
+swarm_pf = sns.swarmplot(
+    x='condition',
+    y='peak_frequency',
+    data=peak_freq_df,
+    order=ORDERED_CONDITIONS,
+    color='black',
+    size=3,
+    alpha=0.7,
+    ax=ax_pf
+)
+
+# Register for pick events
+for coll in swarm_pf.collections:
+    coll.set_picker(True)
+    artist_to_data[coll] = (peak_freq_df, 'peak_frequency')
+
+# Axis labels and title
+ax_pf.set_xlabel('')
+ax_pf.set_ylabel('Frequency (Hz)')
+ax_pf.set_title(
+    f'Peak Frequency (p = {p_pf:.4f})'
+    if p_pf >= 0.0001 else
+    'Peak Frequency (p < 0.0001)'
+)
+
+# --- Helper: Find all ABF files for capacitance ---
+def find_all_abf_files(filtered_df, root_dir):
+    """Find all .abf files for capacitance data."""
+    trimmed_ids = ['_'.join(os.path.basename(rec).split('_')[:4]) 
+                   for rec in filtered_df['recording'].unique()]
     abf_files = []
-    for root_dir, _, files in os.walk(root_dir):
+    for root, _, files in os.walk(root_dir):
         for fname in files:
             if fname.endswith('membrane_test.abf'):
                 parts = fname.split('_')
                 if len(parts) >= 4:
                     try:
                         abf_files.append({
-                            "file_path": os.path.join(root_dir, fname),
+                            "file_path": os.path.join(root, fname),
                             "filename": fname,
                             "date": '_'.join(parts[:3]),
                             "counter": int(parts[3]),
@@ -373,63 +541,142 @@ def find_closest_abf_files(filtered_df, root_dir):
                         continue
 
     abf_df = pd.DataFrame(abf_files)
-    closest_paths = []
-    for tid in trimmed_ids:
-        parts = tid.split('_')
-        if len(parts) < 4: continue
-        try:
-            date, count = '_'.join(parts[:3]), int(parts[3])
-            subset = abf_df[(abf_df['date'] == date) & (abf_df['counter'] < count)]
-            if not subset.empty:
-                closest = subset.iloc[(count - subset['counter']).abs().argmin()]
-                closest_paths.append(closest['file_path'])
-        except ValueError:
-            continue
-    return closest_paths
+    
+    # Filter the ABF files based on trimmed_ids (to match recording IDs)
+    abf_df_filtered = abf_df[abf_df['full_id'].isin(trimmed_ids)]
+    
+    return abf_df_filtered['file_path'].tolist()
 
-# Collect closest ABF file paths based on filtered data
-closest_paths = find_closest_abf_files(filtered_data, ROOT)
+# --- Extract capacitance per cohort ---
+def parse_abf_metadata(file_paths):
+    parsed_data = []
+    for path in file_paths:
+        abf = pyabf.ABF(path)
+        lines = abf.headerText.splitlines()
+        condition = os.path.basename(os.path.dirname(path))
+        for line in lines:
+            if "fTelegraphMembraneCap" in line:
+                match = re.search(r"\[([\d.eE+-]+)", line)
+                value = float(match.group(1)) if match else None
+                parsed_data.append({
+                    'filename': os.path.basename(path),
+                    'condition': condition,
+                    'value': value,
+                    'protocol': abf.protocol
+                })
+    return parsed_data# Find all ABF files for each cohort
 
-# Parse the ABF metadata for capacitance and resistance
-metadata = parse_abf_metadata(closest_paths)
-df_metadata = pd.DataFrame(metadata)
 
-# Filter for membrane capacitance data
-capacitance_data = df_metadata[df_metadata['data_type'] == 'Membrane_Capacitance']
+all_paths = find_all_abf_files(filtered_df=filtered_data, root_dir=ROOT)
 
-# --- Step 10: Plot capacitance on subplot 10 (axs[9]) ---
-# Perform t-test for significance between conditions
-p_val = stats.ttest_ind(capacitance_data[capacitance_data['condition'] == 'control']['value'],
-                        capacitance_data[capacitance_data['condition'] == 'tumor']['value'])[1]
+# Parse the metadata from those files
+metadata = parse_abf_metadata(all_paths)
 
-# Plot Capacitance (boxplot and stripplot)
-sns.boxplot(x='condition', y='value', data=capacitance_data, hue='condition', palette=COLOR_MAP,
-            order=ORDERED_CONDITIONS, showfliers=False, ax=axs[9])
-strip = sns.stripplot(x='condition', y='value', data=capacitance_data, hue='condition',
-                      color=DOT_COLOR, jitter=True, size=3, alpha=0.7, ax=axs[9])
-for coll in strip.collections:
+
+capacitance_data = pd.DataFrame(metadata)
+
+p_cap = t_test_by_condition(capacitance_data, 'value')
+# --- Plot capacitance ---
+# --- Plot capacitance ---
+if not capacitance_data.empty:
+    sns.boxplot(
+        x='condition', 
+        y='value', 
+        data=capacitance_data,
+        order=ORDERED_CONDITIONS, 
+        palette=COLOR_MAP, 
+        showfliers=False, 
+        ax=axs[9], 
+        hue='condition'
+    )
+    sns.stripplot(
+        x='condition', 
+        y='value', 
+        data=capacitance_data, 
+        hue='condition',
+        color='black', 
+        jitter=True, 
+        size=3, 
+        alpha=0.7, 
+        ax=axs[9]
+    )
+    axs[9].set_title(
+        f"Capacitance (p = {p_cap:.4f})"
+        if p_cap >= 0.0001 else
+        "Capacitance (p < 0.0001)"
+    )
+    axs[9].set_ylabel("Capacitance (pF)")  # <-- Change y-axis label here
+    axs[9].set_xlabel('')
+else:
+    axs[9].text(0.5, 0.5, 'No data', ha='center', va='center', fontsize=12)
+    axs[9].set_axis_off()
+
+
+# --- Output at 300 pA as a box-and-whisker plot ---
+IO_TARGET = 300
+io_300 = io_df[io_df['current_injection'] == IO_TARGET]
+
+# Average spike count per recording
+io_300_rec = (
+    io_300
+    .groupby(['recording', 'condition'])['spike_count']
+    .mean()
+    .reset_index()
+)
+
+# --- Step 8b: Boxplot + swarmplot overlay for 300 pA ---
+ax_io_bar = axs[12]
+
+sns.boxplot(
+    x='condition',
+    y='spike_count',
+    data=io_300_rec,
+    order=ORDERED_CONDITIONS,
+    palette=COLOR_MAP,
+    showfliers=False,  # hides outlier points
+    ax=ax_io_bar
+)
+
+# Add swarmplot overlay for point selection
+swarm_io = sns.swarmplot(
+    x='condition',
+    y='spike_count',
+    data=io_300_rec,
+    order=ORDERED_CONDITIONS,
+    color='black',   # solid black dots
+    size=3,
+    alpha=0.7,
+    ax=ax_io_bar
+)
+
+# Register swarm points for picking
+for coll in swarm_io.collections:
     coll.set_picker(True)
-    artist_to_data[coll] = (capacitance_data, 'value')
+    artist_to_data[coll] = (io_300_rec, 'spike_count')
+p_io_300 = t_test_by_condition(io_300_rec, 'spike_count')
 
-
-# Set formatted title with p-value for capacitance plot
-axs[9].set_title(f"Capacitance (p = {p_val:.4f})" if p_val >= 0.0001 else "Capacitance (p < 0.0001)")
-
-# Axis labels for capacitance plot
-axs[9].set_ylabel("Capacitance (pF)")
-axs[9].set_xlabel("")  # Remove default x-axis label
-
+ax_io_bar.set_ylabel('Spike Count')
+ax_io_bar.set_xlabel('')
+ax_io_bar.set_title(
+    f'Output at 300 pA (p = {p_io_300:.4f})'
+    if p_io_300 >= 0.0001 else
+    'Output at 300 pA (p < 0.0001)'
+)
 
 # --- Step 9: Add a Universal Legend ---
-# Creating a custom legend at the bottom
 handles, labels = [], []
 for cond in ORDERED_CONDITIONS:
-    n = capacitance_data[capacitance_data['condition'] == cond]['filename'].nunique()
-    handle = plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=COLOR_MAP[cond], markersize=5)
-    handles.append(handle)
-    labels.append(f"{cond} (n={n})")
+    subset = filtered_data[filtered_data['condition'] == cond]
+    n = subset['recording'].nunique()
+    N = subset['animal_id'].nunique()
 
-fig.legend(handles, labels, loc='center', ncol=2, bbox_to_anchor=(0.5, 0.01))
+    handle = plt.Line2D([0], [0], marker='o', color='w',
+                        markerfacecolor=COLOR_MAP[cond], markersize=5)
+    handles.append(handle)
+    labels.append(f"{cond} (n={n}, N={N})")
+
+
+fig.legend(handles, labels, loc='center', ncol=2, bbox_to_anchor=(0.5, 0.02))
 fig.suptitle(FIG_TITLE, fontsize = 20, fontweight = 'bold', color = 'darkgreen')
 
 # Connect pick event to the handler
@@ -438,5 +685,5 @@ fig.canvas.mpl_connect('pick_event', onpick)
 
 # Show the figure with all subplots
 plt.tight_layout()
-plt.subplots_adjust(hspace=0.5, wspace=0.2)  # hspace for vertical padding, wspace for horizontal padding
+plt.subplots_adjust(hspace=0.5, wspace=0.2, bottom = 0.07)  # hspace for vertical padding, wspace for horizontal padding
 plt.show()

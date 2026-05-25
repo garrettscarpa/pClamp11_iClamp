@@ -5,14 +5,14 @@ import matplotlib.pyplot as plt
 
 ###############################################################################
 # User-defined configuration
-parent_folder = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
-freq_range = [2, 600]  # Frequency range (spike count)
+parent_folder = '/Users/gs075/Desktop/Data/Patch/400pA_V1_RSP_HF'
+freq_range = [2, 6000]  # Frequency range (spike count)
 input_resistance_range = [0, 2000]  # in MΩ, [min, max]
 rmp_range = [-100, -50]  # acceptable RMP range in mV
-half_width_range = [0, 0.75]  # in ms, adjust as needed
-ap_amplitude_threshold = 30  # in mV
+half_width_range = [0.8,10]  # in ms, adjust as needed
+ap_amplitude_threshold = 0  # in mV
 ap_peak_voltage_threshold = -50  # in mV (new exclusion)
-max_firing_rate_range = [2, 2000]  # Example: only include cells with max firing rates between 5 and 50 Hz
+max_firing_rate_range = [2, 600]  # Example: only include cells with max firing rates between 5 and 50 Hz
 ###############################################################################
 
 # Load the thresholded AP data
@@ -188,10 +188,14 @@ for condition in conditions:
 filtered_data_df = pd.concat(filtered_data, ignore_index=True)
 filtered_data_df.to_csv(os.path.join(parent_folder, '4_filtered_data.csv'), index=False)
 
-# Save exclusion log
-excluded_df = pd.DataFrame(excluded_records)
-excluded_df = excluded_df.sort_values(by=['reason', 'recording'], ascending=[True, True])
-excluded_df.to_csv(os.path.join(parent_folder, 'excluded_data.csv'), index=False)
+# Save exclusion log safely
+if excluded_records:  # check if there are any exclusions
+    excluded_df = pd.DataFrame(excluded_records)
+    excluded_df = excluded_df.sort_values(by=['reason', 'recording'], ascending=[True, True])
+    excluded_df.to_csv(os.path.join(parent_folder, 'excluded_data.csv'), index=False)
+    print(f"{len(excluded_df)} records were excluded. Exclusion log saved.")
+else:
+    print("No records were excluded. Exclusion log not created.")
 
 
 

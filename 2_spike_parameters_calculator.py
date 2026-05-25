@@ -9,16 +9,16 @@ from scipy.interpolate import interp1d
 ###ADD CONDITION TO ALL_PARAMETERS.CSV
 
 # Path to the CSV file
-file_path = '/Users/gs075/Desktop/400pA_RSP_Hannah_Farnsworth'
+file_path = '/Users/gs075/Desktop/Data'
 
 
 
-detection_window = 20
-highlight_window = 30       # for zoomed-in pop-up plot; in milliseconds
+detection_window = 2
+highlight_window = 10       # for zoomed-in pop-up plot; in milliseconds
 display_window = 20
 timescale_start = 0.25      # Start of timescale for steady state calculation in seconds (e.g., 250 ms)
 timescale_end = 1.25        # End of timescale for steady state calculation in seconds (e.g., 1250 ms)
-offset = 0.015625
+offset = 0.015625           # Required for Molecular Devices digital amplifiers to offset holding period before each sweep
 LJP_CORRECTION_MV = 14.681  # LJP Correction (in mV) — this value will be subtracted from all voltage measurements
 
 
@@ -177,7 +177,6 @@ def calculate_ap_parameters(time, voltage, ap_peak_time, threshold, abf_sample_r
             first_crossing = second_crossing = half_width = np.nan
     else:
         first_crossing = second_crossing = half_width = np.nan
-
     ap_amplitude = ap_peak_voltage - threshold_voltage
     ahp_amplitude = threshold_voltage - potential_ahp_peak
 
